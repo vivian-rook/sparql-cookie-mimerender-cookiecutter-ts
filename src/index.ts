@@ -1,71 +1,86 @@
-import { IRenderMime } from '@jupyterlab/rendermime-interfaces';
+import {
+  JupyterFrontEnd,
+  JupyterFrontEndPlugin,
+} from '@jupyterlab/application';
 
-import { Widget } from '@lumino/widgets';
+import { ICommandPalette } from '@jupyterlab/apputils';
 
-/**
- * The default mime type for the extension.
- */
-const MIME_TYPE = 'application/vnd.my_organization.my_type';
+import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
-/**
- * The class name added to the extension.
- */
-const CLASS_NAME = 'mimerenderer-my_type';
+import { ILauncher } from '@jupyterlab/launcher';
 
-/**
- * A widget for rendering my_type.
- */
-export class OutputWidget extends Widget implements IRenderMime.IRenderer {
-  /**
-   * Construct a new output widget.
-   */
-  constructor(options: IRenderMime.IRendererOptions) {
-    super();
-    this._mimeType = options.mimeType;
-    this.addClass(CLASS_NAME);
-  }
+import { LabIcon } from '@jupyterlab/ui-components';
 
-  /**
-   * Render my_type into this widget's node.
-   */
-  renderModel(model: IRenderMime.IMimeModel): Promise<void> {
-    const data = model.data[this._mimeType] as string;
-    this.node.textContent = data.slice(0, 16384);
-    return Promise.resolve();
-  }
+import pythonIconStr from '../style/cat.svg';
+//import pythonIconStr from '../style/Python-logo-notext.svg';
 
-  private _mimeType: string;
+const FACTORY = 'Editor';
+const PALETTE_CATEGORY = 'Extension Examples';
+
+namespace CommandIDs {
+  export const createNew = 'jlab-examples:create-new-python-file';
 }
 
-/**
- * A mime renderer factory for my_type data.
- */
-export const rendererFactory: IRenderMime.IRendererFactory = {
-  safe: true,
-  mimeTypes: [MIME_TYPE],
-  createRenderer: (options) => new OutputWidget(options),
-};
+const extension: JupyterFrontEndPlugin<void> = {
+  id: 'launcher',
+  autoStart: true,
+  requires: [IFileBrowserFactory],
+  optional: [ILauncher, ICommandPalette],
+  activate: (
+    app: JupyterFrontEnd,
+    browserFactory: IFileBrowserFactory,
+    launcher: ILauncher | null,
+    palette: ICommandPalette | null
+  ) => {
+    const { commands } = app;
+    const command = CommandIDs.createNew;
+    const icon = new LabIcon({
+      name: 'launcher:python-icon',
+      svgstr: pythonIconStr,
+    });
 
-/**
- * Extension definition.
- */
-const extension: IRenderMime.IExtension = {
-  id: 'sparql-install-front:plugin',
-  rendererFactory,
-  rank: 100,
-  dataType: 'string',
-  fileTypes: [
-    {
-      name: 'my_type',
-      mimeTypes: [MIME_TYPE],
-      extensions: ['.my_type'],
-    },
-  ],
-  documentWidgetFactoryOptions: {
-    name: 'My Viewer',
-    primaryFileType: 'my_type',
-    fileTypes: ['my_type'],
-    defaultFor: ['my_type'],
+    commands.addCommand(command, {
+      label: (args) => (args['isPalette'] ? 'New Python File' : 'install SPARQL'),
+      caption: 'Create a new Python file',
+      icon: (args) => (args['isPalette'] ? null : icon),
+      execute: async (args) => {
+        // Get the directory in which the Python file must be created;
+        // otherwise take the current filebrowser directory
+        const cwd =
+          args['cwd'] || browserFactory.tracker.currentWidget.model.path;
+
+        // Create a new untitled python file
+        const model = await commands.execute('docmanager:new-untitled', {
+          path: cwd,
+          type: 'file',
+          ext: 'py',
+        });
+
+        // Open the newly created file with the 'Editor'
+        return commands.execute('docmanager:open', {
+          path: model.path,
+          factory: FACTORY,
+        });
+      },
+    });
+
+    // Add the command to the launcher
+    if (launcher) {
+      launcher.add({
+        command,
+        category: 'Install',
+        rank: 1,
+      });
+    }
+
+    // Add the command to the palette
+    if (palette) {
+      palette.addItem({
+        command,
+        args: { isPalette: true },
+        category: PALETTE_CATEGORY,
+      });
+    }
   },
 };
 
